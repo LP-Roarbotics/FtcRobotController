@@ -1,3 +1,4 @@
+
 /*   MIT License
  *   Copyright (c) [2024] [Base 10 Assets, LLC]
  *
@@ -23,6 +24,7 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
+import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -31,6 +33,8 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.robotcore.hardware.OpticalDistanceSensor;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
@@ -99,14 +103,19 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
     160 * ARM_TICKS_PER_DEGREE. This asks the arm to move 160° from the starting position.
     If you'd like it to move further, increase that number. If you'd like it to not move
     as far from the starting position, decrease it. */
-
-    final double ARM_COLLAPSED_INTO_ROBOT  = 0;
-    final double ARM_COLLECT               = 0 * ARM_TICKS_PER_DEGREE;
-    final double ARM_CLEAR_BARRIER         = 15 * ARM_TICKS_PER_DEGREE;
-    final double ARM_SCORE_SPECIMEN        = 90 * ARM_TICKS_PER_DEGREE;
-    final double ARM_SCORE_SAMPLE_IN_LOW   = 95 * ARM_TICKS_PER_DEGREE;
-    final double ARM_ATTACH_HANGING_HOOK   = 130 * ARM_TICKS_PER_DEGREE;
-    final double ARM_WINCH_ROBOT           = 10  * ARM_TICKS_PER_DEGREE;
+    final double subInit                   =1430;
+     double ARM_COLLAPSED_INTO_ROBOT  = 0-subInit;
+     double ARM_COLLECT               = (0 * ARM_TICKS_PER_DEGREE)-subInit;
+     double ARM_CLEAR_BARRIER         = (15 * ARM_TICKS_PER_DEGREE)-subInit;
+     double ARM_SCORE_SPECIMEN        = (90 * ARM_TICKS_PER_DEGREE)-subInit;
+     double ARM_SCORE_SAMPLE_IN_LOW   = (95 * ARM_TICKS_PER_DEGREE)-subInit;
+     double ARM_ATTACH_HANGING_HOOK   = (130 * ARM_TICKS_PER_DEGREE)-subInit;
+     double ARM_WINCH_ROBOT           = (10  * ARM_TICKS_PER_DEGREE) -subInit;
+     double SLOW_MOTOR1               =(90 * ARM_TICKS_PER_DEGREE)-subInit;
+     double SLOW_MOTOR2               =(129 * ARM_TICKS_PER_DEGREE)-subInit;
+     double CONTROL_LIMIT             =(45 * ARM_TICKS_PER_DEGREE)-subInit;
+     double armPlayInit             =(89 * ARM_TICKS_PER_DEGREE)-subInit;
+     final double manuelArm = 5 * ARM_TICKS_PER_DEGREE;
 
     /* Variables to store the speed the intake servo should be set at to intake, and deposit game elements. */
     final double INTAKE_COLLECT    = -1.0;
@@ -114,11 +123,11 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
     final double INTAKE_DEPOSIT    =  0.5;
 
     /* Variables to store the positions that the wrist should be set to when folding in, or folding out. */
-    final double WRIST_FOLDED_IN   = 0.2267;
-    final double WRIST_FOLDED_OUT  = 0.54;
+    final double WRIST_FOLDED_IN   = 0.2;
+    final double WRIST_FOLDED_OUT  = 0.52;
 
     /* A number in degrees that the triggers can adjust the arm position by */
-    final double manuelArm = 3 * ARM_TICKS_PER_DEGREE;
+    final double FUDGE_FACTOR = 15 * ARM_TICKS_PER_DEGREE;
 
     /* Variables that are used to set the arm to a specific position */
     double armPosition = (int)ARM_COLLAPSED_INTO_ROBOT;
@@ -150,7 +159,8 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
         double forward;
         double rotate;
         double max;
-
+        ColorSensor sensorColor;
+        Servo light; 
 
         /* Define and Initialize Motors */
         leftFrontDrive  = hardwareMap.dcMotor.get("frontLeftMotor");
@@ -159,7 +169,8 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
         rightBackDrive  = hardwareMap.dcMotor.get("backRightMotor");
         liftMotor       = hardwareMap.dcMotor.get("slideMotor");
         armMotor        = hardwareMap.get(DcMotor.class, "armMotor"); //the arm motor
-
+        sensorColor = hardwareMap.get(ColorSensor.class, "ColorSensor");
+        light = hardwareMap.get(Servo.class,"light");
 
        /*
        we need to reverse the left side of the drivetrain so it doesn't turn when we ask all the
@@ -220,7 +231,7 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
         /* Wait for the game driver to press play */
         waitForStart();
         
-        armPosition =ARM_CLEAR_BARRIER;
+        armPosition =armPlayInit;
         ((DcMotorEx) armMotor).setVelocity(1500);
         armMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
         wrist.setPosition(WRIST_FOLDED_OUT);
@@ -241,6 +252,17 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
                imu.resetYaw();
                armMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
                liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                ARM_COLLAPSED_INTO_ROBOT  = 0;
+                ARM_COLLECT               = (0 * ARM_TICKS_PER_DEGREE);
+                ARM_CLEAR_BARRIER         = (15 * ARM_TICKS_PER_DEGREE);
+                ARM_SCORE_SPECIMEN        = (90 * ARM_TICKS_PER_DEGREE);
+                ARM_SCORE_SAMPLE_IN_LOW   = (95 * ARM_TICKS_PER_DEGREE);
+                ARM_ATTACH_HANGING_HOOK   = (130 * ARM_TICKS_PER_DEGREE);
+                ARM_WINCH_ROBOT           = (10  * ARM_TICKS_PER_DEGREE);
+                SLOW_MOTOR1               =(90 * ARM_TICKS_PER_DEGREE);
+                SLOW_MOTOR2               =(129 * ARM_TICKS_PER_DEGREE);
+                CONTROL_LIMIT             =(45 * ARM_TICKS_PER_DEGREE);
+               
            }
 
            double botHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
@@ -260,7 +282,7 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
            double frontRightPower = (y - x - rx) / denominator;
            double backRightPower = (y + x - rx) / denominator;
 
-        if (armPosition > 90 * ARM_TICKS_PER_DEGREE && armPosition < 129 * ARM_TICKS_PER_DEGREE) { 
+        if (armPosition > SLOW_MOTOR1 && armPosition < SLOW_MOTOR2) { 
                leftFrontDrive.setPower(frontLeftPower * 0.10);
            leftBackDrive.setPower(backLeftPower * 0.10);
            rightFrontDrive.setPower(frontRightPower * 0.10);
@@ -393,7 +415,7 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
             to a value.
              */
 
-           if (armPosition < 45 * ARM_TICKS_PER_DEGREE){
+           if (armPosition < CONTROL_LIMIT){
                armLiftComp = (0.25568 * liftPosition);
                if(liftPosition > LIFT_BELOW45){
                 liftPosition = LIFT_BELOW45;
@@ -411,7 +433,7 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
             our armLiftComp, which adjusts the arm height for different lift extensions.
             We also set the target velocity (speed) the motor runs at, and use setMode to run it.*/
 
-            armMotor.setTargetPosition((int) (armPosition  + armLiftComp));
+            armMotor.setTargetPosition((int) (armPosition + armLiftComp));
 
             ((DcMotorEx) armMotor).setVelocity(1500);
             armMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
@@ -500,6 +522,29 @@ public class COMP_B_TELE_SUB extends LinearOpMode {
            telemetry.addData("liftMotor Current:",((DcMotorEx) liftMotor).getCurrent(CurrentUnit.AMPS));
            telemetry.update();
 
+             telemetry.addData("Light Detected",((OpticalDistanceSensor) sensorColor).getLightDetected());
+            telemetry.addData("Red", sensorColor.red());
+            telemetry.addData("Green", sensorColor.green());
+            telemetry.addData("Blue", sensorColor.blue());
+            telemetry.update();
+            
+            if(sensorColor.red()>=350){
+                light.setPosition(.279);
+                if(sensorColor.green()>=800){
+                    light.setPosition(.330);
+                    //sleep(500);
+                    
+                
+                }
+            }
+            
+           else if(sensorColor.blue()>=400){
+                light.setPosition(.611);
+                //sleep(500);
+            } 
+            else{
+                light.setPosition(0);
+            }
 
 
       
