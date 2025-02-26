@@ -16,11 +16,12 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 @Autonomous
 public class AUTOCORRECT extends LinearOpMode {
 
-    public DcMotorEx bl = null, fl = null, fr = null, br = null;
-    public DcMotorEx armMotor = null;
-    public DcMotorEx liftMotor = null;
-    public Servo claw = null;
-    public Servo wrist = null; // The wrist servo - does this exist? We don't use it in the code...
+    SparkFunOTOS myOtos;
+    public DcMotorEx bl, fl, fr, br;
+    public DcMotorEx armMotor;
+    public DcMotorEx liftMotor;
+    public Servo claw;
+    public Servo wrist; // The wrist servo - does this exist? We don't use it in the code...
 
     // This constant is the number of encoder ticks for each degree of rotation of the arm
     final double ARM_TICKS_PER_DEGREE =
@@ -28,6 +29,9 @@ public class AUTOCORRECT extends LinearOpMode {
             * 250047.0 / 4913.0 // This is the exact gear ratio of the 50.9:1 Yellow Jacket gearbox
             * 100.0 / 20.0 // This is the external gear reduction, a 20T pinion gear that drives a 100T hub-mount gear
             * 1/360.0; // we want ticks per degree, not per rotation
+
+    // Calculates lift ticks per mm using motor encoder
+    final double LIFT_TICKS_PER_MM = (111132.0 / 289.0) / 120.0;
 
     // Positions
     final double ARM_COLLAPSED_INTO_ROBOT  = 0;
@@ -37,36 +41,28 @@ public class AUTOCORRECT extends LinearOpMode {
     final double ARM_CHOMP = 19 * ARM_TICKS_PER_DEGREE;
     final double CLAW_CLOSE    = 0.2;
     final double CLAW_OPEN    =  0.6;
-
-    double armPosition = (int)ARM_COLLAPSED_INTO_ROBOT;
-
-    // Calculates lift ticks per mm using motor encoder
-    final double LIFT_TICKS_PER_MM = (111132.0 / 289.0) / 120.0;
-
-    /* Variables that are used to set the arm to a specific position */
     final double LIFT_COLLAPSED = 0 * LIFT_TICKS_PER_MM;
     final double LIFT_SCORING_IN_LOW_BASKET = 0 * LIFT_TICKS_PER_MM;
     final double LIFT_SCORING_IN_HIGH_BASKET = 670 * LIFT_TICKS_PER_MM;
-    final double LIMIT = 410 * LIFT_TICKS_PER_MM;
-    final double firstSample = 375 * LIFT_TICKS_PER_MM;
-    final double secondSample = 390 * LIFT_TICKS_PER_MM;
-    double liftPosition = LIFT_COLLAPSED;
+    final double LIFT_LIMIT = 410 * LIFT_TICKS_PER_MM;
+    final double LIFT_FIRST_SAMPLE = 375 * LIFT_TICKS_PER_MM;
+    final double LIFT_SECOND_SAMPLE = 390 * LIFT_TICKS_PER_MM;
 
-    SparkFunOTOS myOtos;
+    double liftPosition = LIFT_COLLAPSED;
+    double armPosition = (int)ARM_COLLAPSED_INTO_ROBOT;
     SparkFunOTOS.Pose2D currentPosition;
 
     @Override
     public void runOpMode() {
         myOtos = hardwareMap.get(SparkFunOTOS.class, "sensor_otos");
-
-        /* Define and Initialize Motors */
         bl = hardwareMap.get(DcMotorEx.class, "backLeftMotor");
         fl = hardwareMap.get(DcMotorEx.class, "frontLeftMotor");
         fr = hardwareMap.get(DcMotorEx.class, "frontRightMotor");
         br = hardwareMap.get(DcMotorEx.class, "backRightMotor");
-
-        liftMotor       = hardwareMap.get(DcMotorEx.class, "slideMotor"); //the lift motor aka slide
-        armMotor        = hardwareMap.get(DcMotorEx.class, "armMotor"); //the arm motor
+        claw = hardwareMap.get(Servo.class, "intake");
+        wrist = hardwareMap.get(Servo.class, "wrist");
+        liftMotor = hardwareMap.get(DcMotorEx.class, "slideMotor"); //the lift motor aka slide
+        armMotor = hardwareMap.get(DcMotorEx.class, "armMotor");
 
         bl.setDirection(DcMotorSimple.Direction.REVERSE);
         fl.setDirection(DcMotorSimple.Direction.REVERSE);
@@ -75,21 +71,20 @@ public class AUTOCORRECT extends LinearOpMode {
         fl.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         bl.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         br.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        armMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        liftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         
         fr.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         fl.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         bl.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         br.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        
-        armMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        liftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         armMotor.setCurrentAlert(5,CurrentUnit.AMPS);
         liftMotor.setCurrentAlert(5,CurrentUnit.AMPS);
 
-         /* Before starting the armMotor. We'll make sure the TargetPosition is set to 0.
-         Then we'll set the RunMode to RUN_TO_POSITION. And we'll ask it to stop and reset encoder.
-         If you do not have the encoder plugged into this motor, it will not run in this code. */
+        /* Before starting the armMotor. We'll make sure the TargetPosition is set to 0.
+        Then we'll set the RunMode to RUN_TO_POSITION. And we'll ask it to stop and reset encoder.
+        If you do not have the encoder plugged into this motor, it will not run in this code. */
         armMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         armMotor.setTargetPosition(0);
         armMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
@@ -99,31 +94,16 @@ public class AUTOCORRECT extends LinearOpMode {
         liftMotor.setTargetPosition(0);
         liftMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
 
-
-        /* Define and initialize servos.*/
-        claw = hardwareMap.get(Servo.class, "intake");
-        wrist  = hardwareMap.get(Servo.class, "wrist");
-
-        /* Make sure that the intake is off, and the wrist is folded in. */
-        
-
-        /* Send telemetry message to signify robot waiting */
         telemetry.addLine("Robot Ready.");
         telemetry.update();
 
-        //Initialize timer object
         ElapsedTime timer = new ElapsedTime();
 
-        //Configure OTOS
         configureOtos();
 
         /* Wait for the game driver to press play */
         waitForStart();
-        
-        
-        
-        
-        
+
         if (opModeIsActive()){
             currentPosition = myOtos.getPosition();
 
@@ -131,11 +111,10 @@ public class AUTOCORRECT extends LinearOpMode {
             sleep(50);
 
             armMotorOnly(1500, ARM_CLEAR_BARRIER);
-            
+
             moveToTargetUsingOTOS(14, 0);
-            
-            
-           // rotateMotors(0.4, "left",  0);
+
+            // rotateMotors(0.4, "left",  0);
 
             armMotorOnly(1500, ARM_SCORE_SAMPLE_IN_LOW);
 
@@ -153,6 +132,7 @@ public class AUTOCORRECT extends LinearOpMode {
             }
 
             armMotorOnly(1500, ARM_CLEAR_BARRIER);
+
             //breakPoint();
             currentPosition = myOtos.getPosition();
             timer.reset();
@@ -164,7 +144,7 @@ public class AUTOCORRECT extends LinearOpMode {
             //breakPoint();
             armMotorOnly(1500,ARM_CLEAR_BARRIER);
             //breakPoint();
-            grabSample(firstSample);
+            grabSample(LIFT_FIRST_SAMPLE);
             //breakPoint();
             chomp(ARM_CHOMP);
             //breakPoint();
@@ -194,7 +174,7 @@ public class AUTOCORRECT extends LinearOpMode {
             while(opModeIsActive() && liftMotor.getCurrentPosition() > 30 && timer.seconds() < 2){
                 liftMotor(0);
             }            
-            
+
             armMotorOnly(1500, ARM_CLEAR_BARRIER);
             
             currentPosition = myOtos.getPosition();
@@ -209,7 +189,7 @@ public class AUTOCORRECT extends LinearOpMode {
             armMotorOnly(1500,ARM_CLEAR_BARRIER);
 
             //breakPoint();
-            grabSample(secondSample);
+            grabSample(LIFT_SECOND_SAMPLE);
 
             //breakPoint();
             chomp(ARM_CHOMP);
@@ -278,7 +258,6 @@ public class AUTOCORRECT extends LinearOpMode {
         telemetry.update();
     }
 
-    //attempting to combine all movements into one big method, move = what to do, speed = how fast, d = distance, time = time before forced stop.
     private void moveToTargetUsingOTOS(double targetX, double targetY) {
         while (opModeIsActive() && (Math.abs(currentPosition.x - targetX) > 0.1 || Math.abs(currentPosition.y - targetY) > 0.1 )) {
             double xPower = (targetX - currentPosition.x) * 0.2; // Proportional control
@@ -286,7 +265,7 @@ public class AUTOCORRECT extends LinearOpMode {
 
             xPower = Math.max(-1, Math.min(1, xPower));
             yPower = Math.max(-1, Math.min(1, yPower));
-            
+
             driveMotors(yPower, xPower);
 
             currentPosition = myOtos.getPosition();
@@ -378,8 +357,8 @@ public class AUTOCORRECT extends LinearOpMode {
                 armPosition += (0.257 * liftPosition);
                 armMotor.setTargetPosition ((int)armPosition);
                     armMotor.setVelocity(1500);
-                if(liftPosition > LIMIT){
-                    liftPosition = LIMIT;
+                if(liftPosition > LIFT_LIMIT){
+                    liftPosition = LIFT_LIMIT;
                 }
             }
 
@@ -467,7 +446,6 @@ public class AUTOCORRECT extends LinearOpMode {
             clamp(speed, 0, 2200); // ensuring the speed doesn't go past 2500
             liftMotor.setTargetPosition ((int)targetEncoder);
             liftMotor.setVelocity(speed);
-            
         }
 
         telemetry.addData("Lift Variable", armPosition);
